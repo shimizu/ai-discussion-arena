@@ -7,41 +7,29 @@ import {
   DEFAULT_MC_INTERVAL,
   runDiscussion,
 } from "./discussion/engine.js";
+import {
+  buildEvidenceCsv,
+  buildExportBaseName,
+  buildMinutesMarkdown,
+} from "./discussion/export.js";
 import { ROLE_META } from "./discussion/roles.js";
 import { PROVIDERS } from "./llm/index.js";
+import {
+  STORAGE_PREFIX,
+  loadSetting,
+  removeSetting,
+  saveSetting,
+} from "./storage/local.js";
+import { clearSession, loadSession, saveSession } from "./storage/session.js";
 import { ToolRegistry } from "./tools/registry.js";
+import { downloadTextFile } from "./utils/download.js";
 
-const STORAGE_PREFIX = "ai-discussion.";
 const ESTAT_KEY = `${STORAGE_PREFIX}estatAppId`;
 const TOPIC_KEY = `${STORAGE_PREFIX}topic`;
 const keyStorageId = (providerId) => `${STORAGE_PREFIX}key.${providerId}`;
 const modelStorageId = (providerId) => `${STORAGE_PREFIX}model.${providerId}`;
 
-// localStorageはプライベートモードや設定次第で例外を投げるため、常に保護して読み書きする。
-function loadSetting(key, fallback = "") {
-  try {
-    return globalThis.localStorage?.getItem(key) ?? fallback;
-  } catch {
-    return fallback;
-  }
-}
-
-function saveSetting(key, value) {
-  try {
-    globalThis.localStorage?.setItem(key, value);
-  } catch {
-    // 保存できなくてもメモリ上の状態で動作は継続する。
-  }
-}
-
-function removeSetting(key) {
-  try {
-    globalThis.localStorage?.removeItem(key);
-  } catch {
-    // 削除失敗は無視する。
-  }
-}
-
+// PROVIDERSに依存するため、localStorageのプリミティブとは分けてここに置く。
 function loadRecord(makeKey, fallback) {
   return Object.fromEntries(
     PROVIDERS.map((provider) => [
@@ -58,7 +46,16 @@ const PHASE_LABEL = {
   closing: "総括を作成しています",
 };
 
+// 保存のたびに議事録全体を直列化するので、発言と資料が連続して増える場面では
+// 一拍おいてまとめて書く。
+const SAVE_DEBOUNCE_MS = 400;
+
+// UTF-8のBOM。CSVの先頭に付ける。
+const UTF8_BOM = String.fromCharCode(0xfeff);
+
 function App() {
+  // MB級になりうるので、復元データの読み込みとパースはマウント時の1回だけ。
+  const [restored] = useState(loadSession);
   const [apiKeys, setApiKeys] = useState(() => loadRecord(keyStorageId, () => ""));
   const [models, setModels] = useState(() =>
     loadRecord(modelStorageId, (provider) => provider.defaultModel),
@@ -71,15 +68,26 @@ function App() {
   const [mcInterval, setMcInterval] = useState(DEFAULT_MC_INTERVAL);
 
   const [running, setRunning] = useState(false);
-  const [participants, setParticipants] = useState([]);
-  const [statements, setStatements] = useState([]);
-  const [evidence, setEvidence] = useState([]);
   const [activity, setActivity] = useState(null);
-  const [turnErrors, setTurnErrors] = useState([]);
   const [notice, setNotice] = useState("");
+
+  // 表示中の討議。入力欄のtopic（下書き）とは分けて持つ。
+  // 入力欄を書き換えても、すでに終わった討議の書き出しタイトルが変わらないようにするため。
+  const [discussionTopic, setDiscussionTopic] = useState(() => restored?.topic ?? "");
+  const [participants, setParticipants] = useState(() => restored?.participants ?? []);
+  const [statements, setStatements] = useState(() => restored?.statements ?? []);
+  const [evidence, setEvidence] = useState(() => restored?.evidence ?? []);
+  const [turnErrors, setTurnErrors] = useState(() => restored?.turnErrors ?? []);
+
+  // running のまま保存されていたら、討議中にページが閉じられたということ。
+  const [sessionStatus, setSessionStatus] = useState(() =>
+    restored?.status === "running" ? "interrupted" : (restored?.status ?? "idle"),
+  );
 
   const abortRef = useRef(null);
   const liveRef = useRef(null);
+  const saveTimerRef = useRef(null);
+  const storageWarnedRef = useRef(false);
 
   const availableProviderIds = useMemo(
     () => PROVIDERS.filter((provider) => apiKeys[provider.id]?.trim()).map((p) => p.id),
@@ -91,6 +99,63 @@ function App() {
     if (!activity || !liveRef.current) return;
     liveRef.current.scrollIntoView({ block: "nearest", behavior: "smooth" });
   }, [activity]);
+
+  // 中断された討議を復元したことは、黙って表示すると気づけないので明示する。
+  // 復元後は status が interrupted で保存し直されるため、両方を見る。
+  useEffect(() => {
+    if (restored?.status === "running" || restored?.status === "interrupted") {
+      setNotice(
+        "前回の討議は途中で中断されています。そこまでの記録は復元しましたが、続きからの再開はできません。",
+      );
+    }
+  }, [restored]);
+
+  // 討議の状態をブラウザへ保存する。
+  // 発言と資料は続けて増えるので、一拍おいてからまとめて書く。
+  // タブを閉じるときはunmountが走らないため、pagehideで書き残しを流し込む。
+  useEffect(() => {
+    if (statements.length === 0 && evidence.length === 0) return undefined;
+
+    const flush = () => {
+      clearTimeout(saveTimerRef.current);
+      const result = saveSession({
+        topic: discussionTopic,
+        status: sessionStatus,
+        participants,
+        statements,
+        evidence,
+        turnErrors,
+      });
+
+      if (storageWarnedRef.current) return;
+      if (!result.ok) {
+        storageWarnedRef.current = true;
+        setNotice(
+          "ブラウザの保存容量が不足しているため、討議記録を自動保存できません。議事録とデータを出力しておいてください。",
+        );
+      } else if (result.degraded !== "none") {
+        storageWarnedRef.current = true;
+        setNotice(
+          "保存容量の都合で、古い資料のデータは一部しか保存されていません。今のうちにデータを出力（CSV）しておいてください。",
+        );
+      }
+    };
+
+    saveTimerRef.current = setTimeout(flush, SAVE_DEBOUNCE_MS);
+    window.addEventListener("pagehide", flush);
+
+    return () => {
+      clearTimeout(saveTimerRef.current);
+      window.removeEventListener("pagehide", flush);
+    };
+  }, [
+    discussionTopic,
+    sessionStatus,
+    participants,
+    statements,
+    evidence,
+    turnErrors,
+  ]);
 
   const handleApiKeyChange = (providerId, value) => {
     setApiKeys((current) => ({ ...current, [providerId]: value }));
@@ -114,8 +179,17 @@ function App() {
       removeSetting(keyStorageId(provider.id));
     }
     removeSetting(ESTAT_KEY);
+    // 討議本文もブラウザに残るようになったので、キーと一緒に消す。
+    clearTimeout(saveTimerRef.current);
+    clearSession();
     setApiKeys(Object.fromEntries(PROVIDERS.map((provider) => [provider.id, ""])));
     setEstatAppId("");
+    setDiscussionTopic("");
+    setParticipants([]);
+    setStatements([]);
+    setEvidence([]);
+    setTurnErrors([]);
+    setSessionStatus("idle");
   };
 
   const handleStop = () => {
@@ -135,12 +209,21 @@ function App() {
     }
 
     saveSetting(TOPIC_KEY, trimmedTopic);
+
+    // 保留中の保存を先に止める。順序を誤ると、消した直後に
+    // 古い状態の保存が発火してセッションが書き戻ってしまう。
+    clearTimeout(saveTimerRef.current);
+    clearSession();
+    storageWarnedRef.current = false;
+
     setNotice("");
     setStatements([]);
     setEvidence([]);
     setParticipants([]);
     setTurnErrors([]);
     setActivity(null);
+    setDiscussionTopic(trimmedTopic);
+    setSessionStatus("running");
     setRunning(true);
 
     const controller = new AbortController();
@@ -200,6 +283,7 @@ function App() {
                 ...current,
                 {
                   id: `${event.round}-${event.participant.role}-${current.length}`,
+                  round: event.round,
                   role: event.participant.role,
                   providerLabel: event.participant.providerLabel,
                   message: event.message,
@@ -219,63 +303,39 @@ function App() {
     } finally {
       setActivity(null);
       setRunning(false);
+      setSessionStatus(controller.signal.aborted ? "aborted" : "completed");
       abortRef.current = null;
     }
   };
 
-  const handleExport = () => {
-    const lines = [
-      `# 討議記録: ${topic.trim()}`,
-      "",
-      "## 参加者",
-      ...participants.map(
-        (participant) =>
-          `- ${ROLE_META[participant.role].name}: ${participant.providerLabel}（${participant.model}）`,
-      ),
-      "",
-      "## 議事録",
-      "",
-    ];
+  // 議事録とデータで同じ基底名を使い、.md と .csv が対になるようにする。
+  const exportPayload = () => ({
+    topic: discussionTopic,
+    participants,
+    statements,
+    evidence,
+    turnErrors,
+    status: sessionStatus,
+    exportedAt: new Date(),
+  });
 
-    for (const statement of statements) {
-      lines.push(
-        `### 第${statement.round}巡 ${ROLE_META[statement.role].name}（${statement.providerLabel}）`,
-        "",
-        statement.text,
-        "",
-      );
-      if (statement.toolUses.length > 0) {
-        lines.push(
-          `参照: ${statement.toolUses.map((use) => `${use.source} ${use.label}`).join(" / ")}`,
-          "",
-        );
-      }
-    }
+  const handleExportMinutes = () => {
+    const payload = exportPayload();
+    downloadTextFile(
+      `${buildExportBaseName(discussionTopic, payload.exportedAt)}.md`,
+      buildMinutesMarkdown(payload),
+      "text/markdown;charset=utf-8",
+    );
+  };
 
-    if (evidence.length > 0) {
-      lines.push("## 提出資料", "");
-      evidence.forEach((item, index) => {
-        lines.push(
-          `### 資料${index + 1}: ${item.label}`,
-          `出典: ${item.source} / 提出: ${ROLE_META[item.role].name}`,
-          "",
-          "```",
-          item.content,
-          "```",
-          "",
-        );
-      });
-    }
-
-    const blob = new Blob([lines.join("\n")], {
-      type: "text/markdown;charset=utf-8",
-    });
-    const url = URL.createObjectURL(blob);
-    const anchor = document.createElement("a");
-    anchor.href = url;
-    anchor.download = `討議記録_${topic.trim().slice(0, 24) || "untitled"}.md`;
-    anchor.click();
-    URL.revokeObjectURL(url);
+  const handleExportCsv = () => {
+    const payload = exportPayload();
+    downloadTextFile(
+      `${buildExportBaseName(discussionTopic, payload.exportedAt)}.csv`,
+      // BOMを付けないと、日本語版ExcelがシフトJISとして開いて文字化けする。
+      `${UTF8_BOM}${buildEvidenceCsv(payload)}`,
+      "text/csv;charset=utf-8",
+    );
   };
 
   const totalTurns = maxRounds * 2 + 2 + Math.max(0, Math.floor((maxRounds - 1) / Math.max(mcInterval, 1)));
@@ -285,13 +345,18 @@ function App() {
     <div className="shell">
       <header className="masthead">
         <div className="masthead-title">
-          <h1>円卓</h1>
+          <h1>AI円卓</h1>
           <span className="masthead-sub">AI discussion · e-Stat / World Bank</span>
         </div>
         <div style={{ display: "flex", gap: 10 }}>
           {statements.length > 0 && !running && (
-            <button type="button" className="btn" onClick={handleExport}>
-              議事録を保存
+            <button type="button" className="btn" onClick={handleExportMinutes}>
+              議事録を出力
+            </button>
+          )}
+          {evidence.length > 0 && !running && (
+            <button type="button" className="btn" onClick={handleExportCsv}>
+              データを出力
             </button>
           )}
           <button type="button" className="btn" onClick={() => setSettingsOpen(true)}>
@@ -311,7 +376,7 @@ function App() {
             rows={2}
             value={topic}
             disabled={running}
-            placeholder="例: 日本は移民受け入れを大幅に拡大すべきか"
+            placeholder="ここにテーマを入力してください"
             onChange={(event) => setTopic(event.target.value)}
             onKeyDown={(event) => {
               if (event.key === "Enter" && (event.metaKey || event.ctrlKey)) {

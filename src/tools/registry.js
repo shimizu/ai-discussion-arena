@@ -47,6 +47,11 @@ export class ToolRegistry {
     return this.#tools.get(name)?.source ?? "unknown";
   }
 
+  /**
+   * ツールを実行し、常に `{ content, dataset }` を返す。
+   * contentはLLMへ返す文字列、datasetはCSV書き出し用の生データ（無ければnull）。
+   * 契約をここに集約し、ハンドラが文字列だけを返しても壊れないようにする。
+   */
   async execute(name, input, { signal } = {}) {
     const tool = this.#tools.get(name);
     if (!tool) {
@@ -54,6 +59,10 @@ export class ToolRegistry {
         `未登録のツールです: ${name}。使えるのは ${[...this.#tools.keys()].join(", ")} です。`,
       );
     }
-    return tool.handler(input ?? {}, { ...this.#context, signal });
+
+    const raw = await tool.handler(input ?? {}, { ...this.#context, signal });
+    return typeof raw === "string"
+      ? { content: raw, dataset: null }
+      : { content: raw?.content ?? "", dataset: raw?.dataset ?? null };
   }
 }

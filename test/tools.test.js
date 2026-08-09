@@ -81,16 +81,65 @@ test("World Bankの時系列は表として整形される", async () => {
       dateRange: "2021:2023",
     });
 
-    assert.match(result, /GDP per capita/);
-    assert.match(result, /World Bank World Development Indicators/);
+    assert.match(result.content, /GDP per capita/);
+    assert.match(result.content, /World Bank World Development Indicators/);
     // 年の降順で並ぶ。
-    assert.ok(result.indexOf("2022") < result.indexOf("2021"));
+    assert.ok(result.content.indexOf("2022") < result.content.indexOf("2021"));
     // 欠損年は表に出ない。
-    assert.ok(!result.includes("| 2023 |"));
+    assert.ok(!result.content.includes("| 2023 |"));
     // 全2件と数えられている。
-    assert.match(result, /全2件/);
+    assert.match(result.content, /全2件/);
+
+    // CSV用のデータは生の数値のまま持つ（ロケール整形はcontent側だけ）。
+    assert.deepEqual(result.dataset.columns, ["国", "iso3", "年", "値"]);
+    assert.equal(result.dataset.totalRows, 2);
+    assert.deepEqual(result.dataset.rows[0], {
+      国: "Japan",
+      iso3: "JPN",
+      年: "2022",
+      値: 34017.3,
+    });
+    assert.equal(typeof result.dataset.rows[0].値, "number");
+
     assert.match(stub.urls[0], /country\/JPN\/indicator\/NY\.GDP\.PCAP\.CD/);
     assert.match(stub.urls[0], /date=2021%3A2023/);
+  } finally {
+    stub.restore();
+  }
+});
+
+test("表示は40行までだが、CSV用のデータには全行が残る", async () => {
+  const stub = stubFetch(() => [
+    { page: 1, pages: 1, total: 50 },
+    Array.from({ length: 50 }, (_, index) => ({
+      indicator: { id: "NY.GDP.PCAP.CD", value: "GDP per capita (current US$)" },
+      country: { value: "Japan" },
+      countryiso3code: "JPN",
+      date: String(1970 + index),
+      value: 1000 + index,
+    })),
+  ]);
+
+  try {
+    const registry = new ToolRegistry({});
+    const result = await registry.execute("worldbank_fetch_indicator", {
+      indicatorId: "NY.GDP.PCAP.CD",
+      countries: "JPN",
+    });
+
+    // contentは表示上限で切られ、その旨が書かれている。
+    const tableRows = result.content
+      .split("\n")
+      .filter((line) => /^\| Japan \|/.test(line));
+    assert.equal(tableRows.length, 40);
+    assert.match(result.content, /全50件のうち直近40件/);
+
+    // datasetは全50件を保持する。
+    assert.equal(result.dataset.rows.length, 50);
+    assert.equal(result.dataset.totalRows, 50);
+    // 年の降順。
+    assert.equal(result.dataset.rows[0].年, "2019");
+    assert.equal(result.dataset.rows.at(-1).年, "1970");
   } finally {
     stub.restore();
   }
@@ -167,11 +216,23 @@ test("e-Statのフィルタ配列がクエリへ展開され、名称列だけ�
     assert.match(stub.urls[0], /appId=test-app-id/);
 
     // 分類名と値の列が出て、生のコード列は出ない。
-    assert.match(result, /消費者物価指数/);
-    assert.match(result, /cat01_name/);
-    assert.match(result, /総合/);
-    assert.match(result, /105\.6/);
-    assert.ok(!result.includes("| cat01 |"));
+    assert.match(result.content, /消費者物価指数/);
+    assert.match(result.content, /cat01_name/);
+    assert.match(result.content, /総合/);
+    assert.match(result.content, /105\.6/);
+    assert.ok(!result.content.includes("| cat01 |"));
+
+    // CSV側は原データを辿れるよう、表示しない生のコード列も残す。
+    assert.deepEqual(result.dataset.columns, [
+      "cat01_name",
+      "time_name",
+      "value",
+      "unit",
+      "cat01",
+      "time",
+    ]);
+    assert.equal(result.dataset.rows[0].value, 105.6);
+    assert.equal(result.dataset.rows[0].cat01, "0001");
   } finally {
     stub.restore();
   }
