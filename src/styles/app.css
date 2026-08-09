@@ -1,0 +1,899 @@
+/*
+ * 「円卓」— 議場をモチーフにした配色。
+ * 三役はそれぞれ固有の色を持つ。議長=真鍮、肯定=青緑、否定=紅。
+ * 資料だけが紙色で、議場の中で物理的に浮くように置かれる。
+ */
+
+:root {
+  --chamber: #0f141c;
+  --chamber-raised: #161e2a;
+  --chamber-inset: #1b2431;
+  --line: rgb(150 170 200 / 14%);
+  --line-strong: rgb(150 170 200 / 26%);
+
+  --paper: #ece6d8;
+  --paper-ink: #2b2519;
+  --paper-dim: #6d6553;
+
+  --text: #e4e8ef;
+  --text-dim: #8e9aad;
+  --text-faint: #5d6879;
+
+  --mc: #d8a94f;
+  --positive: #4fc9ac;
+  --negative: #f0728d;
+
+  --font-display: "Yu Mincho", YuMincho, "Hiragino Mincho ProN", "Noto Serif JP",
+    serif;
+  --font-body: "Noto Sans JP", "Hiragino Kaku Gothic ProN", "Yu Gothic",
+    system-ui, sans-serif;
+  --font-mono: ui-monospace, SFMono-Regular, Menlo, "Roboto Mono", monospace;
+
+  color: var(--text);
+  background: var(--chamber);
+  font-family: var(--font-body);
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  min-width: 320px;
+  min-height: 100vh;
+  /* 議場の天井灯。中央上から落ちる一灯だけ。 */
+  background:
+    radial-gradient(ellipse 60rem 30rem at 50% -8rem, rgb(216 169 79 / 9%), transparent 70%),
+    var(--chamber);
+}
+
+button,
+input,
+textarea,
+select {
+  font: inherit;
+  color: inherit;
+}
+
+button {
+  cursor: pointer;
+}
+
+button:focus-visible,
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible,
+a:focus-visible {
+  outline: 2px solid var(--mc);
+  outline-offset: 2px;
+}
+
+/* ---------- shell ---------- */
+
+.shell {
+  width: min(1360px, 100%);
+  margin: 0 auto;
+  padding: 24px 24px 64px;
+}
+
+.masthead {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 20px;
+  padding-bottom: 16px;
+  border-bottom: 1px solid var(--line);
+}
+
+.masthead-title {
+  display: flex;
+  align-items: baseline;
+  gap: 14px;
+}
+
+.masthead h1 {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: 2rem;
+  font-weight: 500;
+  letter-spacing: 0.22em;
+}
+
+.masthead-sub {
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  letter-spacing: 0.14em;
+  color: var(--text-faint);
+  text-transform: uppercase;
+}
+
+/* ---------- buttons ---------- */
+
+.btn {
+  border: 1px solid var(--line-strong);
+  border-radius: 2px;
+  background: transparent;
+  color: var(--text-dim);
+  padding: 8px 16px;
+  letter-spacing: 0.08em;
+  font-size: 0.82rem;
+  transition: border-color 0.15s, color 0.15s, background 0.15s;
+}
+
+.btn:hover:not(:disabled) {
+  border-color: var(--mc);
+  color: var(--text);
+}
+
+.btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.btn-primary {
+  border-color: var(--mc);
+  background: var(--mc);
+  color: #1a1408;
+  font-weight: 600;
+}
+
+.btn-primary:hover:not(:disabled) {
+  background: #e8bc65;
+  color: #1a1408;
+}
+
+.btn-stop {
+  border-color: var(--negative);
+  color: var(--negative);
+}
+
+.btn-stop:hover:not(:disabled) {
+  border-color: var(--negative);
+  background: rgb(240 114 141 / 12%);
+  color: var(--negative);
+}
+
+/* ---------- topic ---------- */
+
+.podium {
+  margin: 28px 0 20px;
+}
+
+.podium-label {
+  font-family: var(--font-mono);
+  font-size: 0.68rem;
+  letter-spacing: 0.2em;
+  color: var(--text-faint);
+  text-transform: uppercase;
+  display: block;
+  margin-bottom: 8px;
+}
+
+.podium-row {
+  display: flex;
+  gap: 12px;
+  align-items: stretch;
+}
+
+.podium-input {
+  flex: 1;
+  min-width: 0;
+  background: var(--chamber-raised);
+  border: 1px solid var(--line-strong);
+  border-radius: 2px;
+  padding: 14px 16px;
+  font-family: var(--font-display);
+  font-size: 1.1rem;
+  letter-spacing: 0.04em;
+  resize: none;
+}
+
+.podium-input::placeholder {
+  color: var(--text-faint);
+  font-family: var(--font-body);
+  font-size: 0.95rem;
+  letter-spacing: normal;
+}
+
+.podium-input:focus {
+  border-color: var(--mc);
+}
+
+.podium-controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 20px;
+  align-items: center;
+  margin-top: 12px;
+}
+
+.dial {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.78rem;
+  color: var(--text-dim);
+}
+
+.dial input {
+  width: 68px;
+  background: var(--chamber-raised);
+  border: 1px solid var(--line);
+  border-radius: 2px;
+  padding: 5px 8px;
+  font-family: var(--font-mono);
+  text-align: right;
+}
+
+.notice {
+  margin: 14px 0 0;
+  padding: 10px 14px;
+  border-left: 2px solid var(--negative);
+  background: rgb(240 114 141 / 8%);
+  font-size: 0.85rem;
+  color: #f4a8b9;
+}
+
+/* ---------- roster ---------- */
+
+.roster {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 1px;
+  margin: 24px 0;
+  background: var(--line);
+  border: 1px solid var(--line);
+}
+
+.roster-seat {
+  background: var(--chamber-raised);
+  padding: 14px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  border-top: 2px solid transparent;
+}
+
+.roster-seat[data-accent="mc"] {
+  border-top-color: var(--mc);
+}
+.roster-seat[data-accent="positive"] {
+  border-top-color: var(--positive);
+}
+.roster-seat[data-accent="negative"] {
+  border-top-color: var(--negative);
+}
+
+.roster-role {
+  font-family: var(--font-display);
+  font-size: 1.05rem;
+  letter-spacing: 0.16em;
+}
+
+.roster-seat[data-accent="mc"] .roster-role {
+  color: var(--mc);
+}
+.roster-seat[data-accent="positive"] .roster-role {
+  color: var(--positive);
+}
+.roster-seat[data-accent="negative"] .roster-role {
+  color: var(--negative);
+}
+
+.roster-provider {
+  font-size: 0.9rem;
+}
+
+.roster-model {
+  font-family: var(--font-mono);
+  font-size: 0.68rem;
+  color: var(--text-faint);
+  word-break: break-all;
+}
+
+/* ---------- progress ---------- */
+
+.proceedings {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin-bottom: 22px;
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  letter-spacing: 0.12em;
+  color: var(--text-faint);
+}
+
+.proceedings-track {
+  flex: 1;
+  height: 1px;
+  background: var(--line-strong);
+  position: relative;
+}
+
+.proceedings-fill {
+  position: absolute;
+  inset: 0 auto 0 0;
+  background: var(--mc);
+  transition: width 0.4s ease;
+}
+
+/* ---------- layout ---------- */
+
+.floor {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 340px;
+  gap: 28px;
+  align-items: start;
+}
+
+/* ---------- statement card (signature) ---------- */
+
+.statement {
+  display: grid;
+  grid-template-columns: 46px minmax(0, 1fr);
+  gap: 18px;
+  padding: 20px 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.statement-rail {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  border-right: 1px solid var(--line);
+  padding-right: 8px;
+}
+
+/* 縦組みの役割名。議事録の綴じ側に役職を記す体裁。 */
+.statement-role {
+  writing-mode: vertical-rl;
+  font-family: var(--font-display);
+  font-size: 0.95rem;
+  letter-spacing: 0.3em;
+  white-space: nowrap;
+}
+
+.statement[data-accent="mc"] .statement-role {
+  color: var(--mc);
+}
+.statement[data-accent="positive"] .statement-role {
+  color: var(--positive);
+}
+.statement[data-accent="negative"] .statement-role {
+  color: var(--negative);
+}
+
+.statement[data-accent="mc"] .statement-rail {
+  border-right-color: rgb(216 169 79 / 40%);
+}
+.statement[data-accent="positive"] .statement-rail {
+  border-right-color: rgb(79 201 172 / 40%);
+}
+.statement[data-accent="negative"] .statement-rail {
+  border-right-color: rgb(240 114 141 / 40%);
+}
+
+.statement-round {
+  font-family: var(--font-mono);
+  font-size: 0.62rem;
+  color: var(--text-faint);
+  letter-spacing: 0.06em;
+}
+
+.statement-head {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  margin-bottom: 10px;
+  flex-wrap: wrap;
+}
+
+.statement-speaker {
+  font-size: 0.9rem;
+  color: var(--text);
+}
+
+.statement-model {
+  font-family: var(--font-mono);
+  font-size: 0.64rem;
+  color: var(--text-faint);
+}
+
+.statement-phase {
+  font-family: var(--font-mono);
+  font-size: 0.62rem;
+  letter-spacing: 0.14em;
+  color: var(--text-faint);
+  border: 1px solid var(--line-strong);
+  border-radius: 2px;
+  padding: 1px 6px;
+}
+
+.statement-body {
+  font-size: 0.95rem;
+  line-height: 1.85;
+  color: #d8dee8;
+}
+
+.statement-body p {
+  margin: 0 0 0.9em;
+}
+
+.statement-body p:last-child {
+  margin-bottom: 0;
+}
+
+.statement-body strong {
+  color: var(--text);
+  font-weight: 600;
+}
+
+.statement-body ul,
+.statement-body ol {
+  margin: 0 0 0.9em;
+  padding-left: 1.4em;
+}
+
+.statement-body li {
+  margin-bottom: 0.3em;
+}
+
+.statement-body table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 0.6em 0 1em;
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+}
+
+.statement-body th,
+.statement-body td {
+  border: 1px solid var(--line);
+  padding: 5px 8px;
+  text-align: left;
+}
+
+.statement-body th {
+  color: var(--text-dim);
+  font-weight: 500;
+}
+
+.statement-body code {
+  font-family: var(--font-mono);
+  font-size: 0.85em;
+  background: var(--chamber-inset);
+  padding: 1px 5px;
+  border-radius: 2px;
+}
+
+.statement-body blockquote {
+  margin: 0 0 0.9em;
+  padding-left: 12px;
+  border-left: 2px solid var(--line-strong);
+  color: var(--text-dim);
+}
+
+/* 発言に添付された資料の見出し */
+.citations {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 12px;
+}
+
+.citation {
+  font-family: var(--font-mono);
+  font-size: 0.66rem;
+  letter-spacing: 0.04em;
+  background: rgb(236 230 216 / 8%);
+  border: 1px solid rgb(236 230 216 / 18%);
+  border-radius: 2px;
+  padding: 3px 8px;
+  color: var(--paper-dim);
+}
+
+.citation[data-source="e-Stat"] {
+  color: #d3c7ab;
+}
+
+.citation[data-source="World Bank"] {
+  color: #a9c3d6;
+}
+
+/* ---------- live status ---------- */
+
+.speaking {
+  display: grid;
+  grid-template-columns: 46px minmax(0, 1fr);
+  gap: 18px;
+  padding: 20px 0;
+}
+
+.speaking-body {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  color: var(--text-dim);
+  font-size: 0.88rem;
+}
+
+.pulse {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: currentColor;
+  animation: pulse 1.4s ease-in-out infinite;
+}
+
+.speaking[data-accent="mc"] {
+  color: var(--mc);
+}
+.speaking[data-accent="positive"] {
+  color: var(--positive);
+}
+.speaking[data-accent="negative"] {
+  color: var(--negative);
+}
+
+@keyframes pulse {
+  0%,
+  100% {
+    opacity: 0.25;
+    transform: scale(0.8);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1.2);
+  }
+}
+
+.turn-error {
+  margin: 12px 0;
+  padding: 10px 14px;
+  border-left: 2px solid var(--negative);
+  background: rgb(240 114 141 / 7%);
+  font-size: 0.82rem;
+  color: #f2a3b3;
+}
+
+/* ---------- empty state ---------- */
+
+.empty {
+  padding: 64px 24px;
+  text-align: center;
+  border: 1px dashed var(--line-strong);
+}
+
+.empty-mark {
+  font-family: var(--font-display);
+  font-size: 2.6rem;
+  letter-spacing: 0.3em;
+  color: var(--text-faint);
+  margin-bottom: 18px;
+}
+
+.empty p {
+  margin: 0 auto;
+  max-width: 32rem;
+  color: var(--text-dim);
+  font-size: 0.9rem;
+  line-height: 1.9;
+}
+
+/* ---------- evidence sidebar ---------- */
+
+.docket {
+  position: sticky;
+  top: 24px;
+}
+
+.docket-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  padding-bottom: 10px;
+  border-bottom: 1px solid var(--line);
+  margin-bottom: 14px;
+}
+
+.docket-head h2 {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: 1rem;
+  letter-spacing: 0.22em;
+  font-weight: 500;
+}
+
+.docket-count {
+  font-family: var(--font-mono);
+  font-size: 0.68rem;
+  color: var(--text-faint);
+}
+
+.docket-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  max-height: calc(100vh - 160px);
+  overflow-y: auto;
+}
+
+/* 資料だけが紙色。議場の中で唯一の物質。 */
+.exhibit {
+  background: var(--paper);
+  color: var(--paper-ink);
+  border-radius: 1px;
+  overflow: hidden;
+  box-shadow: 0 1px 0 rgb(0 0 0 / 40%);
+}
+
+.exhibit-summary {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  padding: 9px 12px;
+  cursor: pointer;
+  list-style: none;
+  font-size: 0.78rem;
+  line-height: 1.5;
+}
+
+.exhibit-summary::-webkit-details-marker {
+  display: none;
+}
+
+.exhibit-index {
+  font-family: var(--font-mono);
+  font-size: 0.66rem;
+  color: var(--paper-dim);
+  flex-shrink: 0;
+}
+
+.exhibit-label {
+  flex: 1;
+  min-width: 0;
+  word-break: break-word;
+}
+
+.exhibit-meta {
+  padding: 0 12px 6px;
+  font-family: var(--font-mono);
+  font-size: 0.62rem;
+  color: var(--paper-dim);
+}
+
+.exhibit-content {
+  margin: 0;
+  padding: 10px 12px 12px;
+  border-top: 1px solid rgb(43 37 25 / 14%);
+  font-family: var(--font-mono);
+  font-size: 0.66rem;
+  line-height: 1.6;
+  white-space: pre-wrap;
+  word-break: break-word;
+  max-height: 320px;
+  overflow: auto;
+}
+
+.docket-empty {
+  padding: 20px 14px;
+  border: 1px dashed var(--line-strong);
+  font-size: 0.8rem;
+  color: var(--text-faint);
+  line-height: 1.8;
+}
+
+/* ---------- settings ---------- */
+
+.settings-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgb(6 9 13 / 72%);
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding: 40px 16px;
+  overflow-y: auto;
+  z-index: 20;
+}
+
+.settings {
+  width: min(640px, 100%);
+  background: var(--chamber-raised);
+  border: 1px solid var(--line-strong);
+  border-radius: 2px;
+  padding: 26px 28px 24px;
+}
+
+.settings h2 {
+  margin: 0 0 4px;
+  font-family: var(--font-display);
+  font-size: 1.2rem;
+  letter-spacing: 0.18em;
+  font-weight: 500;
+}
+
+.settings-lede {
+  margin: 0 0 22px;
+  font-size: 0.8rem;
+  line-height: 1.8;
+  color: var(--text-dim);
+}
+
+.provider-card {
+  border: 1px solid var(--line);
+  border-radius: 2px;
+  padding: 14px 16px 16px;
+  margin-bottom: 12px;
+}
+
+.provider-card-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+
+.provider-name {
+  font-size: 0.95rem;
+}
+
+.provider-vendor {
+  font-family: var(--font-mono);
+  font-size: 0.64rem;
+  color: var(--text-faint);
+  letter-spacing: 0.1em;
+}
+
+.field {
+  display: block;
+  margin-bottom: 10px;
+}
+
+.field-label {
+  display: block;
+  font-family: var(--font-mono);
+  font-size: 0.64rem;
+  letter-spacing: 0.14em;
+  color: var(--text-faint);
+  text-transform: uppercase;
+  margin-bottom: 5px;
+}
+
+.field-input,
+.field-select {
+  width: 100%;
+  background: var(--chamber-inset);
+  border: 1px solid var(--line);
+  border-radius: 2px;
+  padding: 8px 10px;
+  font-family: var(--font-mono);
+  font-size: 0.8rem;
+}
+
+.field-input:focus,
+.field-select:focus {
+  border-color: var(--mc);
+}
+
+.model-row {
+  display: flex;
+  gap: 8px;
+  align-items: stretch;
+}
+
+.model-row .field-input,
+.model-row .field-select {
+  flex: 1;
+  min-width: 0;
+}
+
+.model-row .btn {
+  white-space: nowrap;
+  padding: 8px 12px;
+  font-size: 0.72rem;
+}
+
+.field-help {
+  margin: 4px 0 0;
+  font-size: 0.72rem;
+  line-height: 1.7;
+  color: var(--text-faint);
+}
+
+.field-help a {
+  color: var(--text-dim);
+}
+
+.field-error {
+  margin: 4px 0 0;
+  font-size: 0.72rem;
+  color: #f2a3b3;
+}
+
+.settings-actions {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  margin-top: 18px;
+  padding-top: 16px;
+  border-top: 1px solid var(--line);
+}
+
+.settings-actions .btn-ghost {
+  margin-left: auto;
+}
+
+/* ---------- responsive ---------- */
+
+@media (width <= 1080px) {
+  .floor {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .docket {
+    position: static;
+  }
+
+  .docket-list {
+    max-height: none;
+  }
+}
+
+@media (width <= 680px) {
+  .shell {
+    padding: 18px 16px 48px;
+  }
+
+  .masthead {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 12px;
+  }
+
+  .roster {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .statement,
+  .speaking {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 10px;
+  }
+
+  /* 縦組みの綴じは狭い画面では成立しないので横書きへ戻す。 */
+  .statement-rail {
+    flex-direction: row;
+    align-items: baseline;
+    gap: 10px;
+    border-right: none;
+    border-bottom: 1px solid var(--line);
+    padding: 0 0 6px;
+  }
+
+  .statement-role {
+    writing-mode: horizontal-tb;
+    letter-spacing: 0.18em;
+  }
+
+  .podium-row {
+    flex-direction: column;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}

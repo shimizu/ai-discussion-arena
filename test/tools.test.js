@@ -1,0 +1,213 @@
+import assert from "node:assert/strict";
+import test from "node:test";
+
+import { ToolRegistry } from "../src/tools/registry.js";
+
+function stubFetch(handler) {
+  const original = globalThis.fetch;
+  const urls = [];
+  globalThis.fetch = async (url) => {
+    urls.push(String(url));
+    return {
+      ok: true,
+      status: 200,
+      json: async () => handler(String(url)),
+    };
+  };
+  return {
+    urls,
+    restore() {
+      globalThis.fetch = original;
+    },
+  };
+}
+
+test("e-Stat未設定ならe-Statツールは提示されない", () => {
+  const registry = new ToolRegistry({ estatAppId: "" });
+  const names = registry.definitions().map((tool) => tool.name);
+  assert.ok(!names.some((name) => name.startsWith("estat_")));
+  assert.ok(names.includes("worldbank_search_indicators"));
+});
+
+test("e-Stat設定済みなら全ツールが提示される", () => {
+  const registry = new ToolRegistry({ estatAppId: "app-id" });
+  const names = registry.definitions().map((tool) => tool.name);
+  assert.equal(names.length, 5);
+  assert.ok(names.includes("estat_fetch_data"));
+});
+
+test("未知のツール名は使えるツールを添えて拒否される", async () => {
+  const registry = new ToolRegistry({ estatAppId: "x" });
+  await assert.rejects(
+    registry.execute("search_the_web", {}),
+    /未登録のツールです.*estat_search_tables/s,
+  );
+});
+
+test("World Bankの時系列は表として整形される", async () => {
+  const stub = stubFetch(() => [
+    { page: 1, pages: 1, total: 3 },
+    [
+      {
+        indicator: { id: "NY.GDP.PCAP.CD", value: "GDP per capita (current US$)" },
+        country: { value: "Japan" },
+        countryiso3code: "JPN",
+        date: "2022",
+        value: 34017.3,
+      },
+      {
+        indicator: { id: "NY.GDP.PCAP.CD", value: "GDP per capita (current US$)" },
+        country: { value: "Japan" },
+        countryiso3code: "JPN",
+        date: "2021",
+        value: 40058.0,
+      },
+      // 欠損値は落とす。
+      {
+        indicator: { id: "NY.GDP.PCAP.CD", value: "GDP per capita (current US$)" },
+        country: { value: "Japan" },
+        countryiso3code: "JPN",
+        date: "2023",
+        value: null,
+      },
+    ],
+  ]);
+
+  try {
+    const registry = new ToolRegistry({});
+    const result = await registry.execute("worldbank_fetch_indicator", {
+      indicatorId: "NY.GDP.PCAP.CD",
+      countries: "JPN",
+      dateRange: "2021:2023",
+    });
+
+    assert.match(result, /GDP per capita/);
+    assert.match(result, /World Bank World Development Indicators/);
+    // 年の降順で並ぶ。
+    assert.ok(result.indexOf("2022") < result.indexOf("2021"));
+    // 欠損年は表に出ない。
+    assert.ok(!result.includes("| 2023 |"));
+    // 全2件と数えられている。
+    assert.match(result, /全2件/);
+    assert.match(stub.urls[0], /country\/JPN\/indicator\/NY\.GDP\.PCAP\.CD/);
+    assert.match(stub.urls[0], /date=2021%3A2023/);
+  } finally {
+    stub.restore();
+  }
+});
+
+test("World Bankがエラーを返したら理由が伝わる", async () => {
+  const stub = stubFetch(() => [
+    { message: [{ key: "Invalid value", value: "The provided parameter value is not valid" }] },
+  ]);
+
+  try {
+    const registry = new ToolRegistry({});
+    await assert.rejects(
+      registry.execute("worldbank_fetch_indicator", {
+        indicatorId: "BAD.ID",
+        countries: "JPN",
+      }),
+      /not valid/,
+    );
+  } finally {
+    stub.restore();
+  }
+});
+
+test("国コード未指定は分かるエラーになる", async () => {
+  const registry = new ToolRegistry({});
+  await assert.rejects(
+    registry.execute("worldbank_fetch_indicator", { indicatorId: "X", countries: "" }),
+    /countries/,
+  );
+});
+
+test("e-Statのフィルタ配列がクエリへ展開され、名称列だけが表になる", async () => {
+  const stub = stubFetch(() => ({
+    GET_STATS_DATA: {
+      RESULT: { STATUS: 0 },
+      STATISTICAL_DATA: {
+        TABLE_INF: { TITLE_SPEC: { TABLE_NAME: "消費者物価指数" } },
+        CLASS_INF: {
+          CLASS_OBJ: [
+            {
+              "@id": "cat01",
+              CLASS: [{ "@code": "0001", "@name": "総合", "@unit": "2020=100" }],
+            },
+            {
+              "@id": "time",
+              CLASS: [{ "@code": "2023000000", "@name": "2023年" }],
+            },
+          ],
+        },
+        DATA_INF: {
+          VALUE: [
+            { "@cat01": "0001", "@time": "2023000000", "@unit": "2020=100", $: "105.6" },
+          ],
+        },
+        RESULT_INF: {},
+      },
+    },
+  }));
+
+  try {
+    const registry = new ToolRegistry({ estatAppId: "test-app-id" });
+    const result = await registry.execute("estat_fetch_data", {
+      statsDataId: "0003427113",
+      filters: [
+        { key: "cdCat01", value: "0001" },
+        { key: "cdTimeFrom", value: "2023000000" },
+      ],
+    });
+
+    // フィルタがクエリパラメータへ展開されている。
+    assert.match(stub.urls[0], /cdCat01=0001/);
+    assert.match(stub.urls[0], /cdTimeFrom=2023000000/);
+    assert.match(stub.urls[0], /appId=test-app-id/);
+
+    // 分類名と値の列が出て、生のコード列は出ない。
+    assert.match(result, /消費者物価指数/);
+    assert.match(result, /cat01_name/);
+    assert.match(result, /総合/);
+    assert.match(result, /105\.6/);
+    assert.ok(!result.includes("| cat01 |"));
+  } finally {
+    stub.restore();
+  }
+});
+
+test("e-StatのAPIエラーはそのまま伝わる", async () => {
+  const stub = stubFetch(() => ({
+    GET_STATS_LIST: {
+      RESULT: { STATUS: 100, ERROR_MSG: "該当するデータはありません。" },
+    },
+  }));
+
+  try {
+    const registry = new ToolRegistry({ estatAppId: "x" });
+    await assert.rejects(
+      registry.execute("estat_search_tables", { searchWord: "存在しない統計" }),
+      /該当するデータはありません/,
+    );
+  } finally {
+    stub.restore();
+  }
+});
+
+test("appId未設定でe-Statツールを呼ぶと理由が返る", async () => {
+  const registry = new ToolRegistry({ estatAppId: "" });
+  await assert.rejects(
+    registry.execute("estat_search_tables", { searchWord: "人口" }),
+    /アプリケーションIDが未設定/,
+  );
+});
+
+test("ツールの表示名は引数を含む", () => {
+  const registry = new ToolRegistry({ estatAppId: "x" });
+  assert.equal(
+    registry.describeTool("estat_search_tables", { searchWord: "人口動態" }),
+    "e-Stat統計表検索「人口動態」",
+  );
+  assert.equal(registry.sourceOf("worldbank_fetch_indicator"), "World Bank");
+});
