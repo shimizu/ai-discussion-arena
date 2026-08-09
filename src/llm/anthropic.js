@@ -44,7 +44,7 @@ export const anthropicProvider = {
   id: "claude",
   label: "Claude",
   vendor: "Anthropic",
-  defaultModel: "claude-sonnet-4-6",
+  defaultModel: "claude-opus-4-6",
   keyPlaceholder: "sk-ant-...",
   consoleUrl: "https://platform.claude.com/",
 

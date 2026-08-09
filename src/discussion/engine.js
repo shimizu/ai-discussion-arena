@@ -1,8 +1,8 @@
 import { getProvider } from "../llm/index.js";
 import { ROLE, ROLE_META, assignRoles, buildSystemPrompt, buildTurnInstruction } from "./roles.js";
 
-export const DEFAULT_MAX_ROUNDS = 10;
-export const DEFAULT_MC_INTERVAL = 3;
+export const DEFAULT_MAX_ROUNDS = 6;
+export const DEFAULT_MC_INTERVAL = 2;
 const DEFAULT_MAX_TOOL_ITERATIONS = 4;
 
 // 議事録に全文を載せる直近の発言数。それ以前は要旨だけにしてコンテキストを抑える。
@@ -15,8 +15,11 @@ const EVIDENCE_DIGEST_CHARS = 400;
 // 議長が中間整理で討議を打ち切るときの合図。
 const END_MARKER = "[討議終了]";
 
+// リロードすると採番が1へ巻き戻る。保存済みの討議とIDが衝突しないよう、
+// 読み込みごとのトークンを混ぜておく。
+const RUN_TOKEN = Date.now().toString(36);
 let sequence = 0;
-const nextId = (prefix) => `${prefix}-${(sequence += 1)}`;
+const nextId = (prefix) => `${prefix}-${RUN_TOKEN}-${(sequence += 1)}`;
 
 /**
  * これまでの発言を議事録テキストへ整形する。
@@ -149,7 +152,11 @@ async function runTurn({
       onEvent({ type: "tool_start", participant, name: call.name, label });
 
       try {
-        const content = await registry.execute(call.name, call.input, { signal });
+        // registryは { content, dataset } を返す。モデルへ戻すのはcontentだけで、
+        // datasetはCSV書き出し用に議事録側だけが持つ。
+        const { content, dataset } = await registry.execute(call.name, call.input, {
+          signal,
+        });
         results.push({
           id: call.id,
           geminiId: call.geminiId,
@@ -164,6 +171,7 @@ async function runTurn({
           tool: call.name,
           input: call.input,
           content,
+          dataset,
           role: participant.role,
           providerLabel: provider.label,
         };

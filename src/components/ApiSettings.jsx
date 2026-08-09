@@ -96,6 +96,7 @@ function ApiSettings({
           キーを登録したAIが討議に参加します。3社そろえば議長・肯定側・否定側が
           それぞれ別のAIになり、2社以下のときは1つのAIが複数の役を兼ねます。
           キーはこのブラウザのlocalStorageにのみ保存され、各社のAPI以外へは送信されません。
+          討議の発言と取得データも同じlocalStorageに保存され、次に開いたときに復元されます。
         </p>
 
         {PROVIDERS.map((provider) => (
@@ -169,7 +170,7 @@ function ApiSettings({
             閉じる
           </button>
           <button type="button" className="btn btn-ghost" onClick={onClearAll}>
-            保存したキーをすべて削除
+            保存したキーと討議記録をすべて削除
           </button>
         </div>
       </div>

@@ -5,12 +5,25 @@ import {
 } from "./estat-client.js";
 import { fetchIndicatorSeries, searchIndicators } from "./worldbank-client.js";
 
+/**
+ * ツール定義。
+ *
+ * ハンドラは `{ content, dataset }` を返す。
+ *   content … LLMへ返す文字列。読ませる量を抑えるため表示行数を絞り、数値もロケール整形する。
+ *   dataset … CSV書き出し用の生データ。**ロケール整形しない**（カンマ入り文字列は
+ *             表計算ソフトが数値として読まないため）。表示より多くの行を持つ。
+ */
+
 // LLMへ返す本文の上限。討議は発言者が3人×複数巡なので、1回のツール結果が
 // 大きすぎるとコンテキストとコストをすぐ使い切る。
 export const TOOL_RESULT_CHAR_CAP = 6000;
 
 // 表として返す最大行数。
 const MAX_TABLE_ROWS = 40;
+
+// datasetとして保持する最大行数。World Bankの時系列もe-StatのmaxRecordsも
+// 上限が無いため、メモリに載る量をここで有界にする。
+export const DATASET_MAX_ROWS = 5000;
 
 function truncate(text) {
   if (text.length <= TOOL_RESULT_CHAR_CAP) return text;
@@ -27,19 +40,45 @@ function renderTable(rows, columns) {
 }
 
 /**
- * e-Statのレコードは次元コードと名称が混在するため、討議で読める列だけに絞る。
- * *_name 列（人が読める分類名）と value / unit を残し、生コードは落とす。
+ * CSV用のデータセットを作る。行はcolumnsへ射影し、undefinedはnullへ揃える。
+ * 射影しておくと、保存時に使われない列を抱え込まずに済む。
  */
-function summarizeEstatRecords(records) {
-  if (records.length === 0) return "該当データが0件でした。";
+function makeDataset(rows, columns, note) {
+  if (rows.length === 0 || columns.length === 0) return null;
 
-  const nameColumns = Object.keys(records[0])
-    .filter((key) => key.endsWith("_name"))
-    .slice(0, 5);
+  const capped = rows.length > DATASET_MAX_ROWS ? rows.slice(0, DATASET_MAX_ROWS) : rows;
+  return {
+    columns,
+    rows: capped.map((row) =>
+      Object.fromEntries(columns.map((column) => [column, row[column] ?? null])),
+    ),
+    totalRows: rows.length,
+    ...(note ? { note } : {}),
+  };
+}
 
-  const columns = [...nameColumns, "value", "unit"].filter((column) =>
+/**
+ * e-Statのレコードは次元コードと名称が混在する。
+ * 討議で読ませる列（人が読める分類名 + value + unit）と、
+ * CSVへ落とす全列（生コードも含む）を1か所で決める。
+ */
+function selectEstatColumns(records) {
+  if (records.length === 0) return { display: [], all: [] };
+
+  const keys = Object.keys(records[0]);
+  const nameColumns = keys.filter((key) => key.endsWith("_name")).slice(0, 5);
+  const display = [...nameColumns, "value", "unit"].filter((column) =>
     records.some((record) => record[column] !== undefined),
   );
+
+  // CSVでは原データまで辿れるよう、表示しない生コード列も残す。
+  const all = [...display, ...keys.filter((key) => !display.includes(key))];
+
+  return { display, all };
+}
+
+function summarizeEstatRecords(records, columns) {
+  if (records.length === 0) return "該当データが0件でした。";
 
   const rows = records.slice(0, MAX_TABLE_ROWS).map((record) =>
     Object.fromEntries(
@@ -97,20 +136,33 @@ export const TOOL_DEFINITIONS = [
     async handler(input, { signal, estatAppId }) {
       const result = await searchStatsTables(input, { signal, appId: estatAppId });
       if (result.tables.length === 0) {
-        return "該当する統計表がありませんでした。キーワードを変えて再検索してください。";
+        return {
+          content:
+            "該当する統計表がありませんでした。キーワードを変えて再検索してください。",
+          dataset: null,
+        };
       }
       const rows = result.tables.map((table) => ({
         statsDataId: table.statsDataId,
         統計表: table.title,
         調査年月: table.surveyDate ?? "",
         件数: table.rows ?? "",
+        周期: table.cycle ?? "",
+        更新日: table.updated ?? "",
       }));
-      return truncate(
-        `該当 ${result.total} 件（先頭 ${rows.length} 件を表示）\n\n${renderTable(
+      return {
+        content: truncate(
+          `該当 ${result.total} 件（先頭 ${rows.length} 件を表示）\n\n${renderTable(
+            rows,
+            ["statsDataId", "統計表", "調査年月", "件数"],
+          )}`,
+        ),
+        dataset: makeDataset(
           rows,
-          ["statsDataId", "統計表", "調査年月", "件数"],
-        )}`,
-      );
+          ["statsDataId", "統計表", "調査年月", "件数", "周期", "更新日"],
+          `キーワード「${input.searchWord ?? ""}」の検索結果。該当 ${result.total} 件のうち ${rows.length} 件`,
+        ),
+      };
     },
     label: (input) => `e-Stat統計表検索「${input.searchWord ?? ""}」`,
   },
@@ -145,9 +197,29 @@ export const TOOL_DEFINITIONS = [
           .join("\n");
         return `【${dimension.paramId}】${dimension.name}（全${dimension.itemCount}項目、表示${dimension.items.length}件）\n${items}`;
       });
-      return truncate(
-        `統計表 ${result.statsDataId} の分類事項\n\n${sections.join("\n\n")}\n\n絞り込みには cd<事項ID>（例: cdCat01=xxx、cdTimeFrom=2020000000）を使います。`,
+
+      // 分類事項は入れ子なので、CSV用に「分類事項 × 項目」で平坦化する。
+      const rows = result.dimensions.flatMap((dimension) =>
+        dimension.items.map((item) => ({
+          paramId: dimension.paramId,
+          分類事項: dimension.name,
+          code: item.code,
+          項目名: item.name,
+          level: item.level ?? "",
+          unit: item.unit ?? "",
+        })),
       );
+
+      return {
+        content: truncate(
+          `統計表 ${result.statsDataId} の分類事項\n\n${sections.join("\n\n")}\n\n絞り込みには cd<事項ID>（例: cdCat01=xxx、cdTimeFrom=2020000000）を使います。`,
+        ),
+        dataset: makeDataset(
+          rows,
+          ["paramId", "分類事項", "code", "項目名", "level", "unit"],
+          `統計表 ${result.statsDataId} の分類事項。各事項は表示上限（既定20件）まで`,
+        ),
+      };
     },
     label: (input) => `e-Statメタ情報 ${input.statsDataId ?? ""}`,
   },
@@ -190,11 +262,24 @@ export const TOOL_DEFINITIONS = [
         },
         { signal, appId: estatAppId },
       );
-      return truncate(
-        `統計表: ${result.title}（${result.statsDataId}）\n\n${summarizeEstatRecords(
-          result.records,
-        )}`,
-      );
+
+      const { display, all } = selectEstatColumns(result.records);
+      const note = [
+        `統計表: ${result.title}（${result.statsDataId}）`,
+        result.truncated ? "取得上限に達したため、これ以降のデータは含まれていません" : "",
+      ]
+        .filter(Boolean)
+        .join(" / ");
+
+      return {
+        content: truncate(
+          `統計表: ${result.title}（${result.statsDataId}）\n\n${summarizeEstatRecords(
+            result.records,
+            display,
+          )}`,
+        ),
+        dataset: makeDataset(result.records, all, note),
+      };
     },
     label: (input) => `e-Statデータ取得 ${input.statsDataId ?? ""}`,
   },
@@ -218,7 +303,11 @@ export const TOOL_DEFINITIONS = [
     async handler(input, { signal }) {
       const result = await searchIndicators(input, { signal });
       if (result.indicators.length === 0) {
-        return "該当する指標がありませんでした。より一般的な英語キーワードで再検索してください。";
+        return {
+          content:
+            "該当する指標がありませんでした。より一般的な英語キーワードで再検索してください。",
+          dataset: null,
+        };
       }
       const body = result.indicators
         .map(
@@ -228,7 +317,24 @@ export const TOOL_DEFINITIONS = [
             }`,
         )
         .join("\n");
-      return truncate(`該当 ${result.total} 件（先頭 ${result.indicators.length} 件）\n\n${body}`);
+
+      const rows = result.indicators.map((indicator) => ({
+        id: indicator.id,
+        name: indicator.name,
+        unit: indicator.unit ?? "",
+        note: indicator.note ?? "",
+      }));
+
+      return {
+        content: truncate(
+          `該当 ${result.total} 件（先頭 ${result.indicators.length} 件）\n\n${body}`,
+        ),
+        dataset: makeDataset(
+          rows,
+          ["id", "name", "unit", "note"],
+          `キーワード「${input.keyword ?? ""}」の検索結果。該当 ${result.total} 件のうち ${rows.length} 件`,
+        ),
+      };
     },
     label: (input) => `WB指標検索「${input.keyword ?? ""}」`,
   },
@@ -259,30 +365,42 @@ export const TOOL_DEFINITIONS = [
     async handler(input, { signal }) {
       const result = await fetchIndicatorSeries(input, { signal });
 
-      // 国×年の行が多くなるので、年の降順で表示上限まで切る。
-      const rows = [...result.rows]
-        .sort((a, b) => Number(b.year) - Number(a.year))
-        .slice(0, MAX_TABLE_ROWS)
-        .map((row) => ({
-          国: row.country,
-          年: row.year,
-          値:
-            typeof row.value === "number"
-              ? row.value.toLocaleString("ja-JP", { maximumFractionDigits: 3 })
-              : row.value,
-        }));
+      // 国×年の行が多くなるので、年の降順に並べる。
+      const sorted = [...result.rows].sort((a, b) => Number(b.year) - Number(a.year));
+
+      const displayRows = sorted.slice(0, MAX_TABLE_ROWS).map((row) => ({
+        国: row.country,
+        年: row.year,
+        値:
+          typeof row.value === "number"
+            ? row.value.toLocaleString("ja-JP", { maximumFractionDigits: 3 })
+            : row.value,
+      }));
 
       const note =
-        result.rows.length > MAX_TABLE_ROWS
-          ? `\n\n（全${result.rows.length}件のうち直近${MAX_TABLE_ROWS}件。期間を絞ると全件見られます）`
-          : `\n\n（全${result.rows.length}件）`;
+        sorted.length > MAX_TABLE_ROWS
+          ? `\n\n（全${sorted.length}件のうち直近${MAX_TABLE_ROWS}件。期間を絞ると全件見られます）`
+          : `\n\n（全${sorted.length}件）`;
 
-      return truncate(
-        `指標: ${result.indicatorName}（${result.indicatorId}）\n出典: World Bank World Development Indicators\n\n${renderTable(
-          rows,
-          ["国", "年", "値"],
-        )}${note}`,
-      );
+      return {
+        content: truncate(
+          `指標: ${result.indicatorName}（${result.indicatorId}）\n出典: World Bank World Development Indicators\n\n${renderTable(
+            displayRows,
+            ["国", "年", "値"],
+          )}${note}`,
+        ),
+        // CSVには全件・生の数値を残す。
+        dataset: makeDataset(
+          sorted.map((row) => ({
+            国: row.country,
+            iso3: row.iso3,
+            年: row.year,
+            値: row.value,
+          })),
+          ["国", "iso3", "年", "値"],
+          `指標 ${result.indicatorName}（${result.indicatorId}）/ 出典: World Bank World Development Indicators`,
+        ),
+      };
     },
     label: (input) =>
       `WBデータ取得 ${input.indicatorId ?? ""}（${input.countries ?? ""}）`,

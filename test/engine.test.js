@@ -31,7 +31,12 @@ function createFakeProvider(id, behavior = {}) {
   };
 }
 
-function fakeRegistry(handler = async () => "データ本文") {
+function fakeRegistry(
+  handler = async () => ({
+    content: "データ本文",
+    dataset: { columns: ["年"], rows: [{ 年: "2023" }], totalRows: 1 },
+  }),
+) {
   return {
     definitions: () => [
       {
@@ -42,7 +47,13 @@ function fakeRegistry(handler = async () => "データ本文") {
     ],
     describeTool: (name, input) => `${name}(${input?.searchWord ?? ""})`,
     sourceOf: () => "e-Stat",
-    execute: handler,
+    // 本物のToolRegistryと同じく、ハンドラの戻り値を{content, dataset}へ正規化する。
+    execute: async (...args) => {
+      const raw = await handler(...args);
+      return typeof raw === "string"
+        ? { content: raw, dataset: null }
+        : { content: raw?.content ?? "", dataset: raw?.dataset ?? null };
+    },
   };
 }
 
@@ -126,6 +137,8 @@ test("ツール呼び出しの結果が資料として蓄積され、次の発�
   assert.equal(result.evidence.length, 1);
   assert.equal(result.evidence[0].source, "e-Stat");
   assert.match(result.evidence[0].content, /0003427113/);
+  // 表形式で返らないツール結果はdatasetを持たない。
+  assert.equal(result.evidence[0].dataset, null);
 
   // ツールを使った発言に資料が紐づいている。
   const withEvidence = result.statements.find((s) => s.toolUses.length > 0);
@@ -135,6 +148,58 @@ test("ツール呼び出しの結果が資料として蓄積され、次の発�
   const laterPrompt = plain.calls.at(-1).messages[0].content;
   assert.match(laterPrompt, /提出済みの資料/);
   assert.match(laterPrompt, /0003427113/);
+});
+
+test("ツールのdatasetは資料へ渡り、モデルにはcontentだけが返る", async () => {
+  const dataset = {
+    columns: ["年", "値"],
+    rows: [
+      { 年: "2023", 値: 105.6 },
+      { 年: "2022", 値: 103.2 },
+    ],
+    totalRows: 2,
+  };
+
+  let toolResultSentToModel = null;
+
+  const provider = createFakeProvider("a", {
+    respond(callIndex, { messages }) {
+      if (callIndex === 1) {
+        return {
+          text: "",
+          toolCalls: [{ id: "c1", name: "estat_search_tables", input: {} }],
+          raw: null,
+          usage: { input: 0, output: 0 },
+        };
+      }
+      const toolMessage = messages.find((message) => message.role === "tool");
+      if (toolMessage) toolResultSentToModel = toolMessage.results[0];
+      return {
+        text: "資料に基づいて述べます。",
+        toolCalls: [],
+        raw: null,
+        usage: { input: 0, output: 0 },
+      };
+    },
+  });
+
+  const result = await runDiscussion({
+    topic: "物価",
+    providerIds: ["a"],
+    apiKeys: { a: "k" },
+    models: {},
+    registry: fakeRegistry(async () => ({ content: "表の本文", dataset })),
+    maxRounds: 1,
+    mcInterval: 0,
+    resolveProvider: () => provider,
+  });
+
+  assert.deepEqual(result.evidence[0].dataset, dataset);
+  assert.equal(result.evidence[0].content, "表の本文");
+
+  // モデルへ返るのは文字列のcontentだけで、datasetは渡らない。
+  assert.equal(toolResultSentToModel.content, "表の本文");
+  assert.equal(toolResultSentToModel.dataset, undefined);
 });
 
 test("ツールが失敗しても討議は継続し、モデルへエラーが返る", async () => {
