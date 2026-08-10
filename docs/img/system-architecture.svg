@@ -1,0 +1,78 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="720" viewBox="0 0 1200 720" role="img" aria-labelledby="title desc">
+  <title id="title">AI討議アリーナのシステム全体構成</title>
+  <desc id="desc">ブラウザ内のReact UI、討議エンジン、LLMアダプター、データツール、localStorageと、外部の3社LLM APIおよび統計APIの関係図</desc>
+  <defs>
+    <style>
+      .bg{fill:#f7f5ef}.panel{fill:#fff;stroke:#263238;stroke-width:2}.soft{fill:#eef3f5;stroke:#607d8b;stroke-width:1.5}.accent{fill:#1f5964}.accent2{fill:#845d2a}.external{fill:#fff8e8;stroke:#9a6b22;stroke-width:1.5}.store{fill:#f1ecfa;stroke:#6d5492;stroke-width:1.5}.title,.label,.small,.tiny{font-family:'Droid Sans Fallback','Noto Sans JP',sans-serif}.title{font-size:25px;font-weight:700;fill:#18323a}.label{font-size:17px;font-weight:700;fill:#18323a}.small{font-size:14px;fill:#33474d}.tiny{font-size:12px;fill:#4c5f64}.white{fill:#fff}.line{stroke:#49666d;stroke-width:2;fill:none;marker-end:url(#arrow)}.dash{stroke:#7d6b4c;stroke-width:2;stroke-dasharray:7 6;fill:none;marker-end:url(#arrow2)}
+    </style>
+    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="#49666d"/></marker>
+    <marker id="arrow2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="#7d6b4c"/></marker>
+  </defs>
+  <rect class="bg" width="1200" height="720"/>
+  <text class="title" x="48" y="48">システム全体構成 — バックエンドを持たないブラウザアプリ</text>
+
+  <rect class="panel" x="42" y="78" rx="18" width="770" height="582"/>
+  <rect class="accent" x="42" y="78" rx="18" width="770" height="48"/>
+  <rect class="accent" x="42" y="108" width="770" height="18"/>
+  <text class="label white" x="68" y="109">利用者のブラウザ</text>
+
+  <rect class="soft" x="72" y="154" rx="12" width="710" height="92"/>
+  <text class="label" x="96" y="184">React UI / App.jsx</text>
+  <text class="small" x="96" y="210">設定・開始/中断・逐次イベント描画・Markdown/CSV出力</text>
+  <text class="tiny" x="96" y="232">components: ApiSettings / Statement / Docket</text>
+
+  <rect class="soft" x="72" y="284" rx="12" width="330" height="132"/>
+  <text class="label" x="96" y="316">討議エンジン</text>
+  <text class="small" x="96" y="344">役割割当・進行表・共有議事録</text>
+  <text class="small" x="96" y="369">1発言内のLLM⇄ツールループ</text>
+  <text class="tiny" x="96" y="395">discussion/roles.js, engine.js</text>
+
+  <rect class="soft" x="452" y="284" rx="12" width="330" height="132"/>
+  <text class="label" x="476" y="316">LLMアダプター</text>
+  <text class="small" x="476" y="344">中立契約 ⇄ ベンダー形式</text>
+  <text class="small" x="476" y="369">HTTP再試行・中断・schema変換</text>
+  <text class="tiny" x="476" y="395">llm/anthropic.js, openai.js, gemini.js</text>
+
+  <rect class="soft" x="72" y="454" rx="12" width="330" height="130"/>
+  <text class="label" x="96" y="486">データツール</text>
+  <text class="small" x="96" y="514">中立tool定義・Registry</text>
+  <text class="small" x="96" y="539">e-Stat / World Bank client</text>
+  <text class="tiny" x="96" y="565">content と dataset を分離</text>
+
+  <rect class="store" x="452" y="454" rx="12" width="330" height="130"/>
+  <text class="label" x="476" y="486">ブラウザ保存と出力</text>
+  <text class="small" x="476" y="514">localStorage: 設定 + 直近1討議</text>
+  <text class="small" x="476" y="539">Object URL: Markdown + CSV</text>
+  <text class="tiny" x="476" y="565">サーバー側の永続化なし</text>
+
+  <path class="line" d="M427 246V272"/>
+  <path class="line" d="M402 350H440"/>
+  <path class="line" d="M237 416V442"/>
+  <path class="line" d="M617 416V442"/>
+
+  <text class="label" x="856" y="103">外部サービス</text>
+  <rect class="external" x="850" y="132" rx="12" width="306" height="80"/>
+  <text class="label" x="876" y="164">Anthropic Messages API</text>
+  <text class="small" x="876" y="190">Claude</text>
+  <rect class="external" x="850" y="228" rx="12" width="306" height="80"/>
+  <text class="label" x="876" y="260">OpenAI Responses API</text>
+  <text class="small" x="876" y="286">GPT</text>
+  <rect class="external" x="850" y="324" rx="12" width="306" height="80"/>
+  <text class="label" x="876" y="356">Gemini generateContent</text>
+  <text class="small" x="876" y="382">Google</text>
+
+  <rect class="external" x="850" y="472" rx="12" width="306" height="76"/>
+  <text class="label" x="876" y="503">e-Stat API</text>
+  <text class="small" x="876" y="528">appId必須 / 政府統計</text>
+  <rect class="external" x="850" y="564" rx="12" width="306" height="76"/>
+  <text class="label" x="876" y="595">World Bank API v2</text>
+  <text class="small" x="876" y="620">認証不要 / WDI</text>
+
+  <path class="dash" d="M782 319C816 250 815 174 838 174"/>
+  <path class="dash" d="M782 350H838"/>
+  <path class="dash" d="M782 383C816 389 821 364 838 364"/>
+  <path class="dash" d="M402 500C620 434 747 500 838 510"/>
+  <path class="dash" d="M402 540C616 630 746 604 838 604"/>
+
+  <text class="tiny" x="48" y="692">本番CSPの connect-src は上記5 API originと self のみに限定</text>
+</svg>

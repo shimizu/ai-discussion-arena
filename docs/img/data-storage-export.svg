@@ -1,0 +1,76 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="720" viewBox="0 0 1200 720" role="img" aria-labelledby="title desc">
+  <title id="title">データ取得、保存、出力のフロー</title>
+  <desc id="desc">e-StatとWorld BankのデータがToolRegistryでcontentとdatasetへ分かれ、AI・UI・Markdown・localStorage・CSVへ流れる図</desc>
+  <defs>
+    <style>
+      .bg{fill:#f7f5ef}.source{fill:#fff7e6;stroke:#956920;stroke-width:2}.split{fill:#1f5964;stroke:#163f47;stroke-width:2}.content{fill:#eaf3f4;stroke:#39717b;stroke-width:2}.data{fill:#f0ebf8;stroke:#6d5492;stroke-width:2}.target{fill:#fff;stroke:#435f66;stroke-width:1.7}.warn{fill:#fff0ee;stroke:#a14f45;stroke-width:1.5}.title,.label,.small,.tiny{font-family:'Droid Sans Fallback','Noto Sans JP',sans-serif}.title{font-size:25px;font-weight:700;fill:#18323a}.label{font-size:17px;font-weight:700;fill:#20383f}.small{font-size:13px;fill:#42575d}.tiny{font-size:12px;fill:#52676d}.white{fill:#fff}.line{stroke:#49666d;stroke-width:2.2;fill:none;marker-end:url(#arrow)}.purple{stroke:#6d5492;stroke-width:2.2;fill:none;marker-end:url(#arrow2)}
+    </style>
+    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0L10 5L0 10z" fill="#49666d"/></marker>
+    <marker id="arrow2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0L10 5L0 10z" fill="#6d5492"/></marker>
+  </defs>
+  <rect class="bg" width="1200" height="720"/>
+  <text class="title" x="46" y="46">データ取得・保存・出力 — 読ませる文字列と書き出す表を分離</text>
+
+  <rect class="source" x="48" y="112" rx="12" width="198" height="94"/>
+  <text class="label" x="78" y="146">e-Stat API</text>
+  <text class="small" x="78" y="174">検索 → metadata → data</text>
+  <text class="tiny" x="78" y="193">appIdありの場合のみ提示</text>
+  <rect class="source" x="48" y="250" rx="12" width="198" height="94"/>
+  <text class="label" x="78" y="284">World Bank API</text>
+  <text class="small" x="78" y="312">指標検索 → 時系列</text>
+  <text class="tiny" x="78" y="331">WDI catalogはメモリcache</text>
+
+  <rect class="split" x="310" y="158" rx="14" width="234" height="140"/>
+  <text class="label white" x="338" y="194">ToolRegistry</text>
+  <text class="small white" x="338" y="222">定義の配布と実行</text>
+  <text class="small white" x="338" y="246">戻り値を必ず正規化</text>
+  <text class="small white" x="338" y="270">{ content, dataset }</text>
+  <path class="line" d="M246 159H298"/><path class="line" d="M246 297H280V246H298"/>
+
+  <rect class="content" x="622" y="92" rx="14" width="246" height="162"/>
+  <text class="label" x="649" y="128">content: 読ませる資料</text>
+  <text class="small" x="649" y="158">最大6,000文字</text>
+  <text class="small" x="649" y="182">表は最大40行</text>
+  <text class="small" x="649" y="206">数値はロケール整形可</text>
+  <text class="small" x="649" y="230">人間向けの名称列</text>
+  <rect class="data" x="622" y="310" rx="14" width="246" height="162"/>
+  <text class="label" x="649" y="346">dataset: 書き出す表</text>
+  <text class="small" x="649" y="376">最大5,000行</text>
+  <text class="small" x="649" y="400">numberの生値</text>
+  <text class="small" x="649" y="424">コードを含む全列</text>
+  <text class="small" x="649" y="448">totalRows / note</text>
+  <path class="line" d="M544 207C578 207 578 173 610 173"/>
+  <path class="purple" d="M544 251C580 251 580 391 610 391"/>
+
+  <rect class="target" x="944" y="70" rx="10" width="210" height="72"/>
+  <text class="label" x="971" y="100">LLM tool result</text>
+  <text class="small" x="971" y="124">contentだけを返す</text>
+  <rect class="target" x="944" y="164" rx="10" width="210" height="72"/>
+  <text class="label" x="971" y="194">提出資料UI</text>
+  <text class="small" x="971" y="218">contentを表示</text>
+  <rect class="target" x="944" y="258" rx="10" width="210" height="72"/>
+  <text class="label" x="971" y="288">Markdown議事録</text>
+  <text class="small" x="971" y="312">content原文 + 発言</text>
+  <path class="line" d="M868 150C908 150 908 106 932 106"/>
+  <path class="line" d="M868 173H922V200H932"/>
+  <path class="line" d="M868 203C910 203 910 294 932 294"/>
+
+  <rect class="data" x="310" y="508" rx="14" width="558" height="142"/>
+  <text class="label" x="338" y="542">localStorage: 直近1討議を2キーに分割</text>
+  <text class="small" x="338" y="572">session: 発言・資料本文・参加者・失敗（優先保存）</text>
+  <text class="small" x="338" y="598">datasets: 資料IDごとの行データ（各500行、総予算1,200,000文字）</text>
+  <text class="small" x="338" y="624">容量不足: 行を縮約 → 古いdatasetを除外 → 本文だけ維持</text>
+  <path class="purple" d="M745 472V496"/>
+
+  <rect class="target" x="944" y="382" rx="10" width="210" height="88"/>
+  <text class="label" x="971" y="414">CSV出力</text>
+  <text class="small" x="971" y="438">全資料を連結</text>
+  <text class="small" x="971" y="458">BOM / CRLF / 式注入対策</text>
+  <path class="purple" d="M868 391H932"/>
+  <path class="purple" d="M868 578C923 578 923 470 932 440"/>
+
+  <rect class="warn" x="944" y="540" rx="10" width="210" height="90"/>
+  <text class="label" x="968" y="571">リロード後の制約</text>
+  <text class="small" x="968" y="596">500行を超えた部分は消失</text>
+  <text class="small" x="968" y="616">大きい資料は先にCSV出力</text>
+</svg>

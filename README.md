@@ -8,6 +8,8 @@ Claude・GPT・Gemini に **議長 / 肯定側 / 否定側** の役をランダ�
 サーバーは不要です。APIキーと討議の記録はブラウザの localStorage にのみ保存され、
 各社のAPI以外へは送信されません。
 
+保守・拡張を担当する技術者は、[技術引き継ぎガイド](docs/README.md) を参照してください。複数AI APIの統合方式は [専用ドキュメント](docs/ai-api-orchestration.md) に分けて説明しています。
+
 ---
 
 ## 使い方

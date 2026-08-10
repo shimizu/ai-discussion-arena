@@ -1,0 +1,77 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="760" viewBox="0 0 1200 760" role="img" aria-labelledby="title desc">
+  <title id="title">複数AI APIの統合フロー</title>
+  <desc id="desc">討議エンジンの中立メッセージが各ベンダーアダプターで変換され、rawレスポンスを保持してツール結果とともに再送される構造</desc>
+  <defs>
+    <style>
+      .bg{fill:#f7f5ef}.core{fill:#1f5964;stroke:#163f47;stroke-width:2}.neutral{fill:#eaf3f4;stroke:#39717b;stroke-width:2}.adapter{fill:#fff;stroke:#415d64;stroke-width:2}.vendor{fill:#fff7e6;stroke:#956920;stroke-width:2}.raw{fill:#f0ebf8;stroke:#6d5492;stroke-width:2}.title,.label,.small{font-family:'Droid Sans Fallback','Noto Sans JP',sans-serif}.title{font-size:25px;font-weight:700;fill:#18323a}.label{font-size:17px;font-weight:700;fill:#20383f}.small{font-size:13px;fill:#42575d}.white{fill:#fff}.line{stroke:#49666d;stroke-width:2.2;fill:none;marker-end:url(#arrow)}.back{stroke:#6d5492;stroke-width:2.2;stroke-dasharray:7 5;fill:none;marker-end:url(#arrow2)}
+    </style>
+    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0L10 5L0 10z" fill="#49666d"/></marker>
+    <marker id="arrow2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0L10 5L0 10z" fill="#6d5492"/></marker>
+  </defs>
+  <rect class="bg" width="1200" height="760"/>
+  <text class="title" x="45" y="45">複数AI API統合 — 中立契約とベンダー固有rawの両立</text>
+
+  <rect class="core" x="46" y="88" rx="14" width="242" height="176"/>
+  <text class="label white" x="72" y="124">討議エンジン</text>
+  <text class="small white" x="72" y="153">・役割 / 進行順</text>
+  <text class="small white" x="72" y="177">・共有議事録</text>
+  <text class="small white" x="72" y="201">・提出済み資料</text>
+  <text class="small white" x="72" y="225">・ベンダー形式を知らない</text>
+
+  <rect class="neutral" x="344" y="88" rx="14" width="300" height="176"/>
+  <text class="label" x="368" y="124">中立メッセージ契約</text>
+  <text class="small" x="368" y="153">user: content</text>
+  <text class="small" x="368" y="177">assistant: content + toolCalls + raw</text>
+  <text class="small" x="368" y="201">tool: results[]</text>
+  <text class="small" x="368" y="232">complete → text / toolCalls / raw / usage</text>
+  <path class="line" d="M288 176H332"/>
+
+  <rect class="adapter" x="700" y="74" rx="12" width="214" height="106"/>
+  <text class="label" x="724" y="106">Anthropic adapter</text>
+  <text class="small" x="724" y="131">Messages / content blocks</text>
+  <text class="small" x="724" y="154">tool_use ⇄ tool_result</text>
+  <rect class="adapter" x="700" y="210" rx="12" width="214" height="106"/>
+  <text class="label" x="724" y="242">OpenAI adapter</text>
+  <text class="small" x="724" y="267">Responses / output items</text>
+  <text class="small" x="724" y="290">function_call ⇄ output</text>
+  <rect class="adapter" x="700" y="346" rx="12" width="214" height="106"/>
+  <text class="label" x="724" y="378">Gemini adapter</text>
+  <text class="small" x="724" y="403">generateContent / parts</text>
+  <text class="small" x="724" y="426">functionCall ⇄ Response</text>
+
+  <path class="line" d="M644 136H688"/>
+  <path class="line" d="M644 176C672 182 672 262 688 262"/>
+  <path class="line" d="M644 216C672 230 672 398 688 398"/>
+
+  <rect class="vendor" x="976" y="74" rx="12" width="180" height="106"/>
+  <text class="label" x="1007" y="108">Claude API</text>
+  <text class="small" x="1000" y="136">x-api-key</text>
+  <text class="small" x="1000" y="157">browser-access header</text>
+  <rect class="vendor" x="976" y="210" rx="12" width="180" height="106"/>
+  <text class="label" x="1019" y="244">OpenAI API</text>
+  <text class="small" x="1000" y="272">Bearer / store:false</text>
+  <text class="small" x="1000" y="293">encrypted reasoning</text>
+  <rect class="vendor" x="976" y="346" rx="12" width="180" height="106"/>
+  <text class="label" x="1015" y="380">Gemini API</text>
+  <text class="small" x="1000" y="408">x-goog-api-key</text>
+  <text class="small" x="1000" y="429">OpenAPI subset schema</text>
+  <path class="line" d="M914 127H964"/><path class="line" d="M914 263H964"/><path class="line" d="M914 399H964"/>
+
+  <rect class="raw" x="344" y="520" rx="14" width="812" height="154"/>
+  <text class="label" x="370" y="554">rawを再構成せず同じアダプターへ戻す</text>
+  <text class="small" x="370" y="584">Anthropic: content blocks → tool_use.id の対応を維持</text>
+  <text class="small" x="370" y="609">OpenAI: output items → reasoningとfunction_callの順序、call_idを維持</text>
+  <text class="small" x="370" y="634">Gemini: parts → thoughtSignatureとfunctionCall.idを維持</text>
+  <text class="small" x="370" y="659">最終発言が確定したらrawは破棄。次のAIには共有議事録のテキストだけを渡す。</text>
+
+  <path class="back" d="M807 180C807 478 736 480 736 508"/>
+  <path class="back" d="M807 316C807 476 820 480 820 508"/>
+  <path class="back" d="M807 452V508"/>
+  <path class="back" d="M344 597C254 597 167 468 167 278"/>
+
+  <rect class="neutral" x="46" y="330" rx="12" width="242" height="114"/>
+  <text class="label" x="70" y="364">共有資料の橋渡し</text>
+  <text class="small" x="70" y="393">他社のrawは変換しない</text>
+  <text class="small" x="70" y="417">最終textとcontentを議事録化</text>
+  <path class="line" d="M167 264V318"/>
+</svg>

@@ -1,0 +1,50 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="760" viewBox="0 0 1200 760" role="img" aria-labelledby="title desc">
+  <title id="title">AI討議の実行シーケンス</title>
+  <desc id="desc">利用者が討議を開始してから役割割当、共有議事録の生成、LLMツール往復、逐次UI更新、保存、総括までの流れ</desc>
+  <defs>
+    <style>
+      .bg{fill:#f7f5ef}.head{fill:#1f5964}.lane{stroke:#90a4ae;stroke-width:1.5;stroke-dasharray:5 6}.box{fill:#fff;stroke:#375a63;stroke-width:1.7}.tool{fill:#fff7e6;stroke:#9a6b22;stroke-width:1.7}.event{fill:#f0ebf8;stroke:#6d5492;stroke-width:1.5}.title,.htext,.label,.small{font-family:'Droid Sans Fallback','Noto Sans JP',sans-serif}.title{font-size:25px;font-weight:700;fill:#18323a}.htext{font-size:15px;font-weight:700;fill:#fff}.label{font-size:15px;font-weight:700;fill:#20383f}.small{font-size:13px;fill:#41565c}.line{stroke:#49666d;stroke-width:2;fill:none;marker-end:url(#arrow)}.return{stroke:#7c6744;stroke-width:2;stroke-dasharray:7 5;fill:none;marker-end:url(#arrow2)}
+    </style>
+    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0L10 5L0 10z" fill="#49666d"/></marker>
+    <marker id="arrow2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0L10 5L0 10z" fill="#7c6744"/></marker>
+  </defs>
+  <rect class="bg" width="1200" height="760"/>
+  <text class="title" x="44" y="43">討議シーケンス — イベント駆動で逐次描画</text>
+
+  <rect class="head" x="54" y="70" rx="8" width="180" height="46"/><text class="htext" x="111" y="99">利用者 / UI</text>
+  <rect class="head" x="286" y="70" rx="8" width="210" height="46"/><text class="htext" x="332" y="99">討議エンジン</text>
+  <rect class="head" x="548" y="70" rx="8" width="210" height="46"/><text class="htext" x="596" y="99">LLMアダプター</text>
+  <rect class="head" x="810" y="70" rx="8" width="160" height="46"/><text class="htext" x="852" y="99">ToolRegistry</text>
+  <rect class="head" x="1022" y="70" rx="8" width="130" height="46"/><text class="htext" x="1053" y="99">外部API</text>
+
+  <line class="lane" x1="144" y1="116" x2="144" y2="715"/><line class="lane" x1="391" y1="116" x2="391" y2="715"/>
+  <line class="lane" x1="653" y1="116" x2="653" y2="715"/><line class="lane" x1="890" y1="116" x2="890" y2="715"/>
+  <line class="lane" x1="1087" y1="116" x2="1087" y2="715"/>
+
+  <rect class="box" x="62" y="142" rx="8" width="164" height="52"/><text class="label" x="81" y="165">入力検証</text><text class="small" x="81" y="184">前回保存は検証後に破棄</text>
+  <path class="line" d="M226 168H376"/>
+  <rect class="box" x="306" y="208" rx="8" width="170" height="64"/><text class="label" x="328" y="232">役割と進行表</text><text class="small" x="328" y="252">roles_assigned</text>
+  <path class="line" d="M376 240H158"/>
+
+  <rect class="box" x="304" y="302" rx="8" width="174" height="72"/><text class="label" x="326" y="326">各発言ターン</text><text class="small" x="326" y="347">共有議事録 + 資料</text><text class="small" x="326" y="365">turn_start</text>
+  <path class="line" d="M376 338H158"/>
+  <path class="line" d="M478 338H638"/>
+
+  <rect class="box" x="568" y="395" rx="8" width="170" height="66"/><text class="label" x="592" y="420">ベンダー形式へ変換</text><text class="small" x="592" y="441">rawを含む履歴</text>
+  <path class="line" d="M738 428H1072"/>
+  <path class="return" d="M1072 458H668"/>
+
+  <rect class="tool" x="568" y="484" rx="8" width="170" height="70"/><text class="label" x="591" y="509">toolCallsあり?</text><text class="small" x="591" y="530">なければ最終発言</text><text class="small" x="591" y="548">あれば最大4反復</text>
+  <path class="line" d="M738 519H875"/>
+  <rect class="tool" x="810" y="574" rx="8" width="160" height="66"/><text class="label" x="833" y="598">ツール実行</text><text class="small" x="833" y="619">content + dataset</text>
+  <path class="line" d="M970 607H1072"/>
+  <path class="return" d="M875 640C815 685 704 676 668 554"/>
+
+  <path class="line" d="M568 519C500 520 476 578 407 578"/>
+  <rect class="event" x="304" y="552" rx="8" width="174" height="104"/><text class="label" x="323" y="576">発言・資料を確定</text><text class="small" x="323" y="598">turn_end / tool_success</text><text class="small" x="323" y="619">失敗は記録して継続</text><text class="small" x="323" y="640">議長markerなら総括へ</text>
+  <path class="line" d="M304 604H158"/>
+  <rect class="event" x="62" y="574" rx="8" width="164" height="66"/><text class="label" x="84" y="598">逐次描画</text><text class="small" x="84" y="619">400ms後に自動保存</text>
+
+  <path class="line" d="M391 656V700H144V654"/>
+  <text class="small" x="510" y="708">進行表の終端で総括 → finished → completed</text>
+</svg>
